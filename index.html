@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drowsiness Detection Simulator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>
+</head>
+<body>
+    <h1>Drowsiness Detection Simulator</h1>
+
+    <div id="road" class="road">
+        <div class="car" id="car">🚘</div>
+        <div class="tree" id="tree">🌳</div>
+        <div class="tree1" id="tree1">🌳</div>
+        <div class="tree2" id="tree2">🌳</div>
+        <div class="tree3" id="tree3">🌳</div>
+        <div class="tree4" id="tree4">🌳</div>
+        <div class="tree5" id="tree5">🌳</div>
+        <div class="tree6" id="tree6">🌳</div>
+        <div class="tree7" id="tree7">🌳</div>
+        <div class="tree8" id="tree8">🌳</div>
+        <div class="tree9" id="tree9">🌳</div>
+    </div>
+
+    <div class="speed">
+        Speed: <span id="speedValue">100</span> Km/hr
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
