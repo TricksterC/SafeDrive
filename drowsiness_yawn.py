@@ -12,16 +12,16 @@ import serial
 import os
 import threading
 
-app = Flask(__name__)  # Fix: Use __name__ instead of _name_
+app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Initialize serial communication with Arduino (with timeout and delay)
+# Initialize serial communication with Arduino
 try:
     arduino = serial.Serial('COM6', 9600, timeout=1)
     time.sleep(2)  # Allow time for Arduino to initialize
 except serial.SerialException as e:
     print(f"Error connecting to Arduino: {e}")
-    arduino = None  # Prevent crash if Arduino is unavailable
+    arduino = None
 
 # Constants
 EYE_AR_THRESH = 0.30
@@ -29,6 +29,8 @@ EYE_AR_CONSEC_FRAMES = 25
 YAWN_THRESH = 18
 eye_counter = 0
 last_status = "NONE"
+shut_eye_detected = False  
+yawn_detected = False     
 
 # Load face detection models
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -65,7 +67,8 @@ def index():
     return render_template('index.html')
 
 def process_frame():
-    global eye_counter, last_status
+    global eye_counter, last_status, shut_eye_detected, yawn_detected
+    
     while True:
         frame = vs.read()
         if frame is None:
@@ -73,57 +76,63 @@ def process_frame():
         frame = imutils.resize(frame, width=450)
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # Use Dlib's detector instead of OpenCV
         rects = detector(gray)
-        print(f"Number of faces detected: {len(rects)}")  # Debug: Check face detection
+        print(f"Number of faces detected: {len(rects)}")
 
-        shut_eye_alert = False
-        yawn_alert = False
         ear = 0.0
         distance = 0.0
 
         for rect in rects:
             shape = predictor(gray, rect)
             shape = face_utils.shape_to_np(shape)
-            print(f"Landmarks detected: {len(shape)}")  # Debug: Check landmark detection
+            print(f"Landmarks detected: {len(shape)}")
 
             ear = final_ear(shape)
             distance = lip_distance(shape)
-            print(f"EAR: {ear}, Yawn: {distance}")  # Debug: Print EAR and Yawn values
+            print(f"EAR: {ear}, Yawn: {distance}")
 
+            # Update shut eye detection
             if ear < EYE_AR_THRESH:
                 eye_counter += 1
                 if eye_counter >= EYE_AR_CONSEC_FRAMES:
-                    shut_eye_alert = True
+                    shut_eye_detected = True
+                else:
+                    shut_eye_detected = False
             else:
                 eye_counter = 0
+                shut_eye_detected = False
 
-            if distance > YAWN_THRESH:
-                yawn_alert = True
+            # Update yawn detection
+            yawn_detected = distance > YAWN_THRESH
 
-            # Visualize landmarks for debugging
+            # Visualize landmarks
             for (x, y) in shape:
                 cv2.circle(frame, (x, y), 1, (0, 255, 0), -1)
 
-        # Determine new status
+       
         new_status = "NONE"
-        if shut_eye_alert:
+        if shut_eye_detected:
             new_status = "SHUT_EYE"
-        elif yawn_alert:
+        elif yawn_detected:
             new_status = "YAWN"
 
-        # Send data only if status changes
         if new_status != last_status:
-            print(f"Sending to Arduino: {new_status}")
+            print(f"Shut Eye: {shut_eye_detected}, Yawn: {yawn_detected}")
             if arduino:
-                arduino.write(f"{new_status}\n".encode())  # Convert string to bytes
-            print(f"Emitting WebSocket event: drowsiness_alert, status: {new_status}")  # Debug log
-            socketio.emit('drowsiness_alert', {'status': new_status})
+                
+                arduino.write(f"{int(shut_eye_detected)},{int(yawn_detected)}\n".encode())
+            socketio.emit('drowsiness_alert', {
+                'status': new_status,
+                'shut_eye': shut_eye_detected,
+                'yawn': yawn_detected
+            })
             last_status = new_status
 
         # Display EAR and Yawn Distance on the frame
         cv2.putText(frame, f"EAR: {ear:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
         cv2.putText(frame, f"Yawn: {distance:.2f}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        cv2.putText(frame, f"Shut Eye: {'YES' if shut_eye_detected else 'NO'}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        cv2.putText(frame, f"Yawn: {'YES' if yawn_detected else 'NO'}", (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         # Display frame with detection
         cv2.imshow("Frame", frame)
